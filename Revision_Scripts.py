@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -- coding: utf-8 --
 """
 Created on Tue May  9 14:21:50 2023
 
@@ -8,11 +8,14 @@ Created on Tue May  9 14:21:50 2023
 #%%Inicializacion y Funciones
 from urllib.request import urlopen
 import pandas as pd
+import datetime
 from datetime import datetime, timedelta, time
 import tkinter as tk
 from tkinter import filedialog
 import simplekml
 import utm
+from time import sleep
+
 
 def bus_direc(name,direc):
     d=list()
@@ -71,12 +74,16 @@ def Quitar_(l):
     return out3
 
 def convertir_fecha(F):
-    try:
-        return datetime.strptime(F,'%Y-%m-%dT%H:%M:%SZ')
-    except: del F
+    print(F)
+    return datetime.strptime(F,'%Y-%m-%dT%H:%M:%SZ')-timedelta(hours=3)
+def convertir_fecha_sinhora(F):
+    print(F)
+    return datetime.strptime(F,'%Y-%m-%dT%H:%M:%SZ')-timedelta(hours=3)
 
 def Obtener_dia(t):
-    return t.date()
+    try:
+        return t.date()
+    except: del (t)
 def Obtener_hora(t):
     try:
         return t.time()
@@ -105,11 +112,13 @@ def replacemarzo(t):
 def to_date(t):
     return datetime.strptime(t," %d de %B de %Y").date()
 
+Result = filedialog.askdirectory(title='Elija Carpeta de Resultados') #OJO AQUI ESTA LA CARPETA DONDE SE GUARDAN LOS RESULTADOS
+
 #%%Tomar Datos Originales
 from statistics import mean
 
 #Po = pd.read_csv('Centroides_Paneles_GUANCHOI.csv')
-Po=pd.read_csv(filedialog.askopenfilename(title='Elija Carpeta de Excel Sueltos'))
+Po=pd.read_csv(filedialog.askopenfilename(title='Elija Excel Con centroides GUANCHOI'))
 Po.columns=['X','Y','TRK']
 
 Po['CT']=Po.TRK.apply(lambda x: x.split('.')[1])
@@ -145,16 +154,21 @@ Po_stats['side']=side
 
 
 
-#%%Crear Listas de Trackers
+#%%Leer Base de Datos
 URL=['https://api.orcascan.com/views/lCkVsM7sSVs6VAsD.csv?history=True']
 
-#%% Abrir URL y tratamiento de datos. Crear DF de datos
+# Abrir URL y tratamiento de datos. Crear DF de datos
 
 Total=pd.DataFrame()
 for u in URL:
     r=urlopen(u)
+    
     a=r.read()
     a=a.decode().split('\n')
+    print('Descarga de base de datos realizada')
+
+
+
     del a[0]
     Change=list()
     SheetName=list()
@@ -186,7 +200,7 @@ for u in URL:
             ChangedOn.append(dat[8])
             ChangedUsing.append(dat[9])
         else: Malos.append(dat)
-            
+    print('Creado el formato de datos desde base de datos')        
     df=pd.DataFrame()
     df['Change']=Change
     df['SheetName']=SheetName
@@ -200,13 +214,15 @@ for u in URL:
     df['ChangedUsing']=ChangedUsing
     
     df=df[df['Barcode'].str.len()>1]
-    df['Date']=df['Date'].apply(convertir_fecha)   
+    df=df.query('lat!="?"').copy()
+    df['Date']=df['ChangedOn'].apply(convertir_fecha)   
     df['lon']=df['lon'].str.replace(' ','').apply(to_float)
     df['lat']=df['lat'].str.replace(' ','').apply(to_float)
     df['Day']=df['Date'].apply(Obtener_dia)
     df=df.sort_values(['ChangedBy','Date'],ignore_index=True)
     Total=pd.concat([Total,df],axis=0)
-    Total=Total.query('Day>datetime(2024,1,1).date()')
+    ing=datetime(2024,1,1).date()
+    Total=Total.query('Day > @ing').copy()
 
 #Crear utm
 Total['int']=Total['lat'].astype(str)+' '+Total['lon'].astype(str)
@@ -219,43 +235,56 @@ Total.loc[filtro,'D']='M'
 filtro = Total.Date.dt.time >= time(14, 0)
 Total.loc[filtro,'D']='T'
 
+SINCRO=Total.copy()
+SINCRO.to_csv(Result+r'/todo_Sincronizados.csv')
+
+print('Descarga de base de datos realizada, Excel con datos de respaldo creado (todo_Sincronizados.csv)')
+
 #%%Agregar excels nuevos
 import os
-sueltos = filedialog.askdirectory(title='Elija Carpeta de Excel Sueltos')
+sueltos = filedialog.askdirectory(title='Elija Carpeta de exceles de Listas ')
 
-csvs=bus_direc('.csv', sueltos)
-xlsx=bus_direc('.xls', sueltos)
+csvs=bus_direc('.csv', sueltos) # Revisa si es CSV
+xlsx=bus_direc('.xls', sueltos) # Revisa si es EXCEL
 
-Change2=list()
-SheetName2=list()
-Barcode2=list()
-lat2=list()
-lon2=list()
-ids2=list()
-Date2=list()
-ChangedBy2=list()
-ChangedOn2=list()
-ChangedUsing2=list()
-Malos2=list()
+# Creación de listas
+
+Change2=list() #
+SheetName2=list()       # Listado de excel
+Barcode2=list()         # Listado de codigos de barra
+lat2=list()             # Listado de latitud
+lon2=list()             # Listado de longitud
+ids2=list()             # Listado de ids
+Date2=list()            # Listado de fecha
+ChangedBy2=list()       # ??
+ChangedOn2=list()       # ??
+ChangedUsing2=list()    # ??
+Malos2=list()           # ??
 
 for ex in xlsx:
-    Lec=pd.read_csv(ex)
+    Lec=pd.read_excel(ex)
     cuenta=ex.split('/')[-3]
-    #Lec.columns=['BARCODE','idd','GPS','DATE']
+    # iteración sobre los archivos excel/csv
+    # Toma en cuenta solo los mediciones GPS correctas
+    # BC = barcode
+    # LATLON = GPS
+    # DATE = Date
     for BC,LATLON,DATE  in zip(Lec['Barcode'],Lec['GPS'],Lec['Date']):
         if LATLON=='Unknown': 
             print(ex)
             pass
+        
         else:
+            # Guarda los datos de los excel en una lista que tiene los campos de add,archivo,barcode,lat,lon,id,fecha,correo,timestamp,"un ladrillo"???
             Change2.append('add')
-            SheetName2.append(ex)
-            Barcode2.append(BC)
+            SheetName2.append(ex.split('/')[-1])
+            Barcode2.append(BC) 
             lat2.append(float(LATLON.split(',')[0]))
             lon2.append(float(LATLON.split(',')[1]))
             ids2.append(1)
             Date2.append(DATE)
-            ChangedBy2.append(cuenta)
-            ChangedOn2.append(DATE)
+            ChangedBy2.append(f'sdlascan{int(ex.split("/")[-1].split("-")[1])}@gmail.com')
+            ChangedOn2.append(DATE) 
             ChangedUsing2.append('Un Ladrillo')
 
 df2=pd.DataFrame()
@@ -272,424 +301,147 @@ df2['ChangedUsing']=ChangedUsing2
 
 df2['Day']=df2['Date'].apply(Obtener_dia)
 
-df2=df2.sort_values(['ChangedBy','Date'],ignore_index=True)
-
-Result = filedialog.askdirectory(title='Elija Carpeta de Resultados')
-df2.to_csv(Result+r'/TODO_EXELES.csv')
-Total.to_csv(Result+r'/TODO_Sincronizado.csv')
-Po_ex.to_csv(Result+r'/Centroides_UTM.csv')
-Po_stats.to_csv(Result+r'/Estadisticas_Planta_por_linea.csv')
+df2=df2.sort_values(['Date','ChangedBy','SheetName'],ignore_index=True)
 Total=df2.copy()
 
-#%% Estadisticas
-from time import sleep
-for di in Total.Day.drop_duplicates().sort_values():
-    T_dia=Total.query('Day==@di').copy()
-    #if di==datetime(2024,1,31).date():continue
-    #print(di,len(T_dia))
-    for user in T_dia.ChangedBy.drop_duplicates().sort_values():
-        T_user=T_dia.query('ChangedBy==@user')
-        print(di,user,len(T_user.query('Barcode.str.len()==14 and D=="M"')),len(T_user.query('Barcode.str.len()==14 and D=="T"')),len(T_user.query('D=="M"')),len(T_user.query('D=="T"')))#,len(T_user.query('Barcode.str.len()==14'))/42)
-        for Sheet_ in T_user.SheetName.drop_duplicates().sort_values():
-            T_sheet=T_user.query('SheetName==@Sheet_')
-            Xmm=mean(T_sheet.X)
-            Ymm=mean(T_sheet.Y)
-            try:
-                CT=list(Po_stats.query('abs(Xmed-@Xmm)<2 and Ysup>@Ymm and Yinf<@Ymm').CT)[0]
-            except: CT='?'
-            #print(len(T_sheet.query('Barcode.str.len()==14').drop_duplicates(keep='last'))/42)
-            #print(di,user,Sheet_,CT,len(T_sheet.drop_duplicates('Barcode')))
-            #T_sheet.to_csv('Primer_avance.csv')
-            #sleep(5)
+Total['int']=Total['lat'].astype(str)+' '+Total['lon'].astype(str)
+Total['X']=Total['int'].apply(lambda x: utm.from_latlon(float(x.split(' ')[0]), float(x.split(' ')[1]))[0])
+Total['Y']=Total['int'].apply(lambda x: utm.from_latlon(float(x.split(' ')[0]), float(x.split(' ')[1]))[1])
+del Total['int']
+Total['D']='?'
+filtro = Total.Date.dt.time < time(14, 0)
+Total.loc[filtro,'D']='M'
+filtro = Total.Date.dt.time >= time(14, 0)
+Total.loc[filtro,'D']='T'
+EXX=Total.copy()
 
 
-
-
-#%%Datos anteriores TRATAMIENTO DE DATOS
-totalPaneles=len(Z1)+len(Z2)+len(Z3)+len(Z4)+len(Z5)
-
-TCSV=df.copy() #Copia de Datos
-
-#Rectiicar lineas Segunda Visita
-tf=TCSV[TCSV['Barcode'].str.len()==21].drop_duplicates('Barcode',keep='last')
-tf=tf[tf['lat']!='?']
-
-import utm
-Xn=list()
-Yn=list()
-
-for lat,lon in zip(tf['lat'],tf['lon']):
-    print((lat, lon))
-    Xn.append(utm.from_latlon(lat, lon)[0])
-    Yn.append(utm.from_latlon(lat, lon)[1])
-
-tf['X']=Xn
-tf['Y']=Yn
-tf['Hour']=tf['Date'].apply(Obtener_hora)
-tf.to_csv(Result+r'/tf_sinrec.csv')
-
-#%% Rectificar segunda visita
-Rect=tf.sort_values(['Day','SheetName','Hour']).drop_duplicates('Barcode',keep='last')
-'''
-ho=list()
-for dati,hori in zip(Rect['Date'],Rect['Hour']):
-    if dati == datetime(2023, 3, 30).date():
-        ho.append(hori)
-    if dati >= datetime(2023, 3, 31).date():
-        ho.append(hori.replace(hour=(hori.hour-1)))
-
-PrVis['Hora']=ho
-'''
-Corr=pd.DataFrame()
-Erro=pd.DataFrame()
-horaMañana=datetime(1990,3,3, 13, 20, 1).time()
-import statistics
-from statistics import mean
-from time import sleep
-
-for Dia in Rect.Day.drop_duplicates():
-    print(Dia)
-    for Sheet in Rect.query('Day==@Dia').SheetName.drop_duplicates():
-        Scans=Rect.query('(Day==@Dia) & (SheetName==@Sheet)')
-        if statistics.pstdev(Scans.X)<4 and statistics.pstdev(Scans.X)>0:
-            Dat=Rect.query('(Day==@Dia) & (SheetName==@Sheet)')#.to_csv('test.csv')
-            if len(Dat):
-                print (len(Scans),statistics.pstdev(Scans.X),Sheet,mean(Dat['X']))
-                Dat['Xmean']=mean(Dat['X'])
-                Corr=pd.concat([Corr,Dat],axis=0)
-            #sleep(1)
-        if statistics.pstdev(Scans.X)>=4:
-            Dat=Rect.query('(Day==@Dia) & (SheetName==@Sheet)')#.to_csv('test.csv')
-            if len(Dat)>10:
-                print (len(Scans),statistics.pstdev(Scans.X),Sheet,mean(Dat['X']))
-                #Mañana
-                Dat=Rect.query('(Day==@Dia) & (SheetName==@Sheet) & (Hour<@horaMañana)')
-                if len(Dat)>10:
-                    if statistics.pstdev(Dat.X)>4:
-                        Dat1=Dat.query(f'X<{mean(Dat["X"])}')
-                        Dat2=Dat.query(f'X>{mean(Dat["X"])}')
-                        
-                        if statistics.pstdev(Dat1.X)>4:
-                            Dat3=Dat1.query(f'X<{mean(Dat1["X"])}')
-                            Dat4=Dat1.query(f'X>{mean(Dat1["X"])}')
-                            Dat3['Xmean']=mean(Dat3["X"])
-                            Dat4['Xmean']=mean(Dat4["X"])
-                            Corr=pd.concat([Corr,Dat3,Dat4],axis=0)
-                            
-                        if statistics.pstdev(Dat1.X)<=4 and statistics.pstdev(Dat1.X)>0:
-                            Dat1['Xmean']=mean(Dat1["X"])
-                            Corr=pd.concat([Corr,Dat1],axis=0) 
-                            
-                        if statistics.pstdev(Dat2.X)>4:
-                            Dat3=Dat2.query(f'X<{mean(Dat2["X"])}')
-                            Dat4=Dat2.query(f'X>{mean(Dat2["X"])}')
-                            Dat3['Xmean']=mean(Dat3["X"])
-                            Dat4['Xmean']=mean(Dat4["X"])
-                            Corr=pd.concat([Corr,Dat3,Dat4],axis=0)
-                            
-                        if statistics.pstdev(Dat2.X)<=4 and statistics.pstdev(Dat2.X)>0:
-                            Dat2['Xmean']=mean(Dat2["X"])
-                            Corr=pd.concat([Corr,Dat2],axis=0) 
-                            
-                    if statistics.pstdev(Dat.X)<=4 and statistics.pstdev(Dat.X)>0:
-                        Dat['Xmean']=mean(Dat['X'])
-                        Corr=pd.concat([Corr,Dat],axis=0) 
-                #Tarde
-                Dat=Rect.query('(Day==@Dia) & (SheetName==@Sheet) & (Hour>@horaMañana)')
-                if len(Dat)>10:
-                    if statistics.pstdev(Dat.X)>4:
-                        Dat1=Dat.query(f'X<{mean(Dat["X"])}')
-                        Dat2=Dat.query(f'X>{mean(Dat["X"])}')
-                        
-                        if statistics.pstdev(Dat1.X)>4:
-                            Dat3=Dat1.query(f'X<{mean(Dat1["X"])}')
-                            Dat4=Dat1.query(f'X>{mean(Dat1["X"])}')
-                            Dat3['Xmean']=mean(Dat3["X"])
-                            Dat4['Xmean']=mean(Dat4["X"])
-                            Corr=pd.concat([Corr,Dat3,Dat4],axis=0)
-                            
-                        if statistics.pstdev(Dat1.X)<=4 and statistics.pstdev(Dat1.X)>0:
-                            Dat1['Xmean']=mean(Dat1["X"])
-                            Corr=pd.concat([Corr,Dat1],axis=0) 
-                            
-                        if statistics.pstdev(Dat2.X)>4:
-                            Dat3=Dat2.query(f'X<{mean(Dat2["X"])}')
-                            Dat4=Dat2.query(f'X>{mean(Dat2["X"])}')
-                            Dat3['Xmean']=mean(Dat3["X"])
-                            Dat4['Xmean']=mean(Dat4["X"])
-                            Corr=pd.concat([Corr,Dat3,Dat4],axis=0)
-                            
-                        if statistics.pstdev(Dat2.X)<=4 and statistics.pstdev(Dat2.X)>0:
-                            Dat2['Xmean']=mean(Dat2["X"])
-                            Corr=pd.concat([Corr,Dat2],axis=0) 
-                            
-                    if statistics.pstdev(Dat.X)<=4 and statistics.pstdev(Dat.X)>0:
-                        Dat['Xmean']=mean(Dat['X']) 
-                        Corr=pd.concat([Corr,Dat],axis=0) 
-            
-Corr.to_csv(Result+r'/Corr.csv')
-
-E=pd.DataFrame()
-E['Xmean']=Corr['Xmean']
-E['Y']=Corr['Y']
-E['C']=Corr['Barcode']
-E['Hour']=Corr['Hour']
-E['Day']=Corr['Day']
-
-#%%
-#Rectificar Primera Visita
-PrVis = pd.read_csv('Antecedentes/Primera Visita Codigos y posiciones en UTM, LAT LON, LISTA, HORA.csv').sort_values(['Lista','Fecha','Hora'])
-PrVis['Fecha']=PrVis['Fecha'].apply(replacemarzo)
-PrVis['Fecha']=PrVis['Fecha'].apply(to_date)
-PrVis['Hora']=PrVis['Hora'].apply(to_time)
-'''
-ho=list()
-for dati,hori in zip(PrVis['Fecha'],PrVis['Hora']):
-    if dati < datetime(2022, 4, 2).date():
-        ho.append(hori)
-    if dati >= datetime(2022, 4, 2).date():
-        ho.append(hori.replace(hour=(hori.hour-1)))
-
-PrVis['Hora']=ho
-'''
-Rect2=PrVis.sort_values(['Fecha','Lista','Hora'])
-
-
-import statistics
-from statistics import mean
-from time import sleep
-
-Corr2=pd.DataFrame()
-Erro2=pd.DataFrame()
-
-
-for Dia in Rect2.Fecha.drop_duplicates():
-    print(Dia)
-    horaMañana=datetime(1990,3,3, 13, 20, 1).time()
-    for Sheet in Rect2.query('Fecha==@Dia').Lista.drop_duplicates():
-        Scans=Rect2.query('(Fecha==@Dia) & (Lista==@Sheet)')
-        if len(Scans)>0:
-            if statistics.pstdev(Scans.X)<4 and statistics.pstdev(Scans.X)>0:
-                Dat=Rect2.query('(Fecha==@Dia) & (Lista==@Sheet)')#.to_csv('test.csv')
-                if len(Dat)>10:
-                    print (len(Scans),statistics.pstdev(Scans.X),Sheet,mean(Dat['X']))
-                    Dat['Xmean']=mean(Dat['X'])
-                Corr2=pd.concat([Corr2,Dat],axis=0)
-                Dat.to_csv('muestra1.csv')
-                #sleep(1)
-            if statistics.pstdev(Scans.X)>4:
-                Dat=Rect2.query('(Fecha==@Dia) & (Lista==@Sheet)')#.to_csv('test.csv')
-                if len(Dat)>10:
-                    print (len(Scans),statistics.pstdev(Scans.X),Sheet,mean(Dat['X']))
-                    #Mañana
-                    Dat=Rect2.query('(Fecha==@Dia) & (Lista==@Sheet) & (Hora<@horaMañana)')
-                    if len(Dat)>10:
-                        if statistics.pstdev(Dat.X)>4:
-                            Dat1=Dat.query(f'X<{mean(Dat["X"])}')
-                            Dat2=Dat.query(f'X>{mean(Dat["X"])}')
-                            
-                            if statistics.pstdev(Dat1.X)>4:
-                                Dat3=Dat1.query(f'X<{mean(Dat1["X"])}')
-                                Dat4=Dat1.query(f'X>{mean(Dat1["X"])}')
-                                Dat3['Xmean']=mean(Dat3["X"])
-                                Dat4['Xmean']=mean(Dat4["X"])
-                                Corr2=pd.concat([Corr2,Dat3,Dat4],axis=0)
-                                #Dat3.to_csv('muestra1.csv')
-                                #sleep(0.5)
-                                #Dat4.to_csv('muestra1.csv')
-                                #sleep(0.5)
-                                
-                            if statistics.pstdev(Dat1.X)<4 and statistics.pstdev(Dat1.X)>0:
-                                Dat1['Xmean']=mean(Dat1["X"])
-                                Corr2=pd.concat([Corr2,Dat1],axis=0) 
-                                Dat1.to_csv('muestra1.csv')
-                                
-                            if statistics.pstdev(Dat2.X)>4:
-                                Dat3=Dat2.query(f'X<{mean(Dat2["X"])}')
-                                Dat4=Dat2.query(f'X>{mean(Dat2["X"])}')
-                                Dat3['Xmean']=mean(Dat3["X"])
-                                Dat4['Xmean']=mean(Dat4["X"])
-                                Corr2=pd.concat([Corr2,Dat3,Dat4],axis=0)
-                                #Dat3.to_csv('muestra1.csv')
-                                #sleep(0.5)
-                                #Dat4.to_csv('muestra1.csv')
-                                #sleep(0.5)
-                                
-                                
-                            if statistics.pstdev(Dat2.X)<4 and statistics.pstdev(Dat2.X)>0:
-                                Dat2['Xmean']=mean(Dat2["X"])
-                                Corr2=pd.concat([Corr2,Dat2],axis=0) 
-                                #Dat2.to_csv('muestra1.csv')
-                                
-                        if statistics.pstdev(Dat.X)<4 and statistics.pstdev(Dat.X)>0:
-                           Corr2=pd.concat([Corr2,Dat],axis=0) 
-                           #Dat2.to_csv('muestra1.csv')
-                    #Tarde
-                    Dat=Rect2.query('(Fecha==@Dia) & (Lista==@Sheet) & (Hora>@horaMañana)')
-                    if len(Dat)>10:
-                        if statistics.pstdev(Dat.X)>4:
-                            Dat1=Dat.query(f'X<{mean(Dat["X"])}')
-                            Dat2=Dat.query(f'X>{mean(Dat["X"])}')
-                            
-                            if statistics.pstdev(Dat1.X)>4:
-                                Dat3=Dat1.query(f'X<{mean(Dat1["X"])}')
-                                Dat4=Dat1.query(f'X>{mean(Dat1["X"])}')
-                                Dat3['Xmean']=mean(Dat3["X"])
-                                Dat4['Xmean']=mean(Dat4["X"])
-                                Corr2=pd.concat([Corr2,Dat3,Dat4],axis=0)
-                                #Dat3.to_csv('muestra1.csv')
-                                #sleep(0.5)
-                                #Dat4.to_csv('muestra1.csv')
-                                #sleep(0.5)
-                                
-                            if statistics.pstdev(Dat1.X)<4 and statistics.pstdev(Dat1.X)>0:
-                                Dat1['Xmean']=mean(Dat1["X"])
-                                Corr2=pd.concat([Corr2,Dat1],axis=0) 
-                                Dat1.to_csv('muestra1.csv')
-                                
-                            if statistics.pstdev(Dat2.X)>4:
-                                Dat3=Dat2.query(f'X<{mean(Dat2["X"])}')
-                                Dat4=Dat2.query(f'X>{mean(Dat2["X"])}')
-                                Dat3['Xmean']=mean(Dat3["X"])
-                                Dat4['Xmean']=mean(Dat4["X"])
-                                Corr2=pd.concat([Corr2,Dat3,Dat4],axis=0)
-                                #Dat3.to_csv('muestra1.csv')
-                                #sleep(0.5)
-                                #Dat4.to_csv('muestra1.csv')
-                                #sleep(0.5)
-                                
-                                
-                            if statistics.pstdev(Dat2.X)<4 and statistics.pstdev(Dat2.X)>0:
-                                Dat2['Xmean']=mean(Dat2["X"])
-                                Corr2=pd.concat([Corr2,Dat2],axis=0) 
-                                #Dat2.to_csv('muestra1.csv')
-                                
-                        if statistics.pstdev(Dat.X)<4 and statistics.pstdev(Dat.X)>0:
-                           Corr2=pd.concat([Corr2,Dat],axis=0) 
-                           #Dat2.to_csv('muestra1.csv')
-            
-Corr2.to_csv(Result+r'/Corr2.csv')
-Rect2.to_csv(Result+r'/Rect2.csv')
-
-C=pd.DataFrame()
-C['Xmean']=Corr2['Xmean']
-C['Y']=Corr2['Y']
-C['C']=Corr2['Codigo']
-C['Hour']=Corr2['Hora']
-C['Day']=Corr2['Fecha']
-#%%
-import simplekml
-import utm
-
-def latlon(mXM2,tXm2,miny2,maxy2):
-    LL1=tuple(reversed(utm.to_latlon(mXM2, miny2, zone_number=19, northern=False)))
-    LL2=tuple(reversed(utm.to_latlon(tXm2, miny2, zone_number=19, northern=False)))
-    LL3=tuple(reversed(utm.to_latlon(tXm2, maxy2, zone_number=19, northern=False)))
-    LL4=tuple(reversed(utm.to_latlon(mXM2, maxy2, zone_number=19, northern=False)))
-    LL5=tuple(reversed(utm.to_latlon(mXM2, miny2, zone_number=19, northern=False)))
-    return [LL1,LL2,LL3,LL4,LL5]
+EXX['idlista']=0
+EXX['CT_LISTA']='?'
+cont_id=0
+for DD in EXX.Day.drop_duplicates().sort_values():
+    Total_DD=EXX.query('Day==@DD') #Filtrado por dia
     
+    for User in Total_DD.ChangedBy.drop_duplicates().sort_values():
+        Total_User=Total_DD.query('ChangedBy==@User')
+        
+        for ShNa in Total_User.SheetName.drop_duplicates().sort_values():
+            cont_id+=1
+            Total_ShNa=Total_User.query('SheetName==@ShNa')
+            EXX.loc[(EXX['Day']==DD)&(EXX['ChangedBy']==User)&(EXX['SheetName']==ShNa),'idlista']=cont_id
+            print(ShNa,cont_id)
+        
+EXX=EXX.drop_duplicates('Barcode',keep='last')
+EXX['Barcode']=EXX['Barcode'].astype('str')
+print('Creado el formato de datos desde Exceles, respaldado en TODO_EXCELES.csv')
+#%%Estadisticas
+
+print('Para los Excels')
+for DD in Total.Day.drop_duplicates().sort_values():
+    Total_DD=Total.query('Day==@DD') #Filtrado por dia
+    print(DD)
+    print('El dia',DD,'se escanearon',len(Total_DD), 'en total')
+    
+    for User in Total_DD.ChangedBy.drop_duplicates().sort_values():
+        Total_User=Total_DD.query('ChangedBy==@User')
+        print('El usuario',User,'escaneo',len(Total_User),'codigos')
+        
 
 
-D=pd.concat([C,E],axis=0).drop_duplicates('C',keep='last')
+REPORT=pd.DataFrame()
+Repair=pd.DataFrame()
 
-tipo=list()
-for fecha,hora in zip(D['Day'],D['Hour']):
+sen=7 #sensibilidad 
 
-    if fecha < datetime(2022, 8, 1).date(): #Primera Visita
-        if (fecha < datetime(2022, 4, 2).date()):#Cambio de Horario
-            if (hora<datetime(1990,3,3, 13, 30, 1).time()):
-                tipo.append('Mañana')
-            else:
-                tipo.append('Tarde')
-        else: #Horario Invierno Una hora menos
-            if (hora<datetime(1990,3,3, 12, 30, 1).time()):
-                tipo.append('Mañana')
-            else:
-                tipo.append('Tarde')
-    else: #Segunda Visita
-        if (fecha == datetime(2023, 3, 29).date()) or (fecha == datetime(2023, 4, 28).date()): #Solo se Paso por el Oeste
-            tipo.append('Tarde')
-            print(fecha)
-        else:
-            if (fecha < datetime(2023, 4, 1).date()):#Cambio de Horario
-                if (hora<datetime(1990,3,3, 13, 10, 1).time()):
-                    tipo.append('Mañana')
-                else:
-                    tipo.append('Tarde')
-            else: #Horario Invierno Una hora menos
-                if (hora<datetime(1990,3,3, 14, 10, 1).time()):
-                    tipo.append('Mañana')
-                else:
-                    tipo.append('Tarde')
 
-D['Tipo']=tipo
 
-D.query('Tipo=="Tarde"').to_csv(Result+r'/Tarde total.csv') 
-D.query('Tipo=="Mañana"').to_csv(Result+r'/Mañana total.csv') 
+DIA=list()
+USER=list()
+SHEET=list()
+CCM=list()
+CCT=list()
+CCM_F=list()
+CCT_F=list()
+REPARACIONES=list()
+
+campos_de_listas=pd.DataFrame()
+d_=list()
+lis_=list()
+ct_=list()
+idlis_=list()
+
+
+id_sheet=0
+stat=dict()
+for h in range(37,66):
+    stat[str(h)]=0
+    
+for DD in EXX.Day.drop_duplicates().sort_values():
+    Total_DD=EXX.query('Day==@DD') #Filtrado por dia
+    for User in Total_DD.ChangedBy.drop_duplicates().sort_values():
+        Total_User=Total_DD.query('ChangedBy==@User')
+        
+        #REVISAR LAS LISTAS
+        for ShNa in Total_User.SheetName.drop_duplicates().sort_values():
+            Total_ShNa=Total_User.query('SheetName==@ShNa')
+            idlis=Total_ShNa.idlista.iloc[0]
+            #Selector de lineas
+            xm=mean(Total_ShNa.X)
+            ym=mean(Total_ShNa.Y)
+            horario=Total_ShNa.D.drop_duplicates().iloc[0][0]
+            line=Po_stats.query('abs(Xmed-@xm)<@sen and Ysup>@ym and Yinf<@ym and side==@horario')
+
+
+            if len(line)==1:
+                #print(line.CT.iloc[0], line.Cant_p.iloc[0],len(Total_ShNa.query('Barcode.str.len()==14')))
+                escans=len(Total_ShNa.query('Barcode.str.len()==14 and Barcode.str.contains("I")').drop_duplicates())
+                original=line.Cant_p.iloc[0]
+                
+                if escans%42==0:
+                    
+                    stat[str(line.CT.iloc[0])]=stat[line.CT.iloc[0]]+escans
+                    EXX.loc[EXX['idlista']==idlis,'CT_LISTA']=line.CT.iloc[0]
+                    d_.append(DD)
+                    lis_.append(ShNa)
+                    idlis_.append(idlis)
+                    ct_.append(line.CT.iloc[0])
+                
+                elif (escans!=original):
+                    REPARACIONES.append(' '.join(['Revisar',ShNa,'del dia',str(DD),'se escaneo',str(escans), 'de',str(original)]))
+            
+                
+            else: 
+                print(ShNa,DD,len(line))
+                REPARACIONES.append(' '.join(['Revisar',ShNa,'del dia',str(DD),'se escaneo',str(escans), 'de',str(original)]))
+        DIA.append(DD)
+        USER.append(User)
+        CCM.append(len(Total_User.query('D=="M"')))
+        CCT.append(len(Total_User.query('D=="T"')))
+        CCM_F.append(len(Total_User.query('D=="M" and Barcode.str.len()==14')))
+        CCT_F.append(len(Total_User.query('D=="T" and Barcode.str.len()==14')))
+
+REPORT['DIA']=DIA
+REPORT['USER']=USER
+REPORT['CCM']=CCM
+REPORT['CCT']=CCT
+REPORT['CCM_F']=CCM_F
+REPORT['CCT_F']=CCT_F
+
+campos_de_listas['Fecha']=d_
+campos_de_listas['Lista']=lis_
+campos_de_listas['idlista']=idlis_
+campos_de_listas['CT']=ct_
+campos_de_listas.to_csv(Result+r'/CAMPOS_DE_LISTAS.csv',index=False)
+
+
+REPORT.to_csv(Result+rf'/REPORTE_{str(datetime.now()).replace(":","_")}_{str(datetime.now()).replace(":","_")}.csv')
+Repair['R']=REPARACIONES
+Repair.to_csv(Result+rf'/Reparaciones_{str(datetime.now()).replace(":","_")}.csv',index=False)
+
+EXX.to_csv(Result+r'/TODO_EXELES.csv')
+print(stat)
+print('Proceso terminado')
+
 #%%
-listatrk=list()
 
-spdx=0
-spdy=0
-
-trkcn=list()
-kml = simplekml.Kml()
-kmlpt = simplekml.Kml()
-kmlp = simplekml.Kml()
-kmlp2 = simplekml.Kml()
-
-for zone in ZT:
-    alpha=10 #parametro de sensibilidad
-    Mañana=D.query('Tipo=="Mañana"')
-    Tarde=D.query('Tipo=="Tarde"')
-    print(len(zone))
-    zone['TRK']=zone['TRK'].str.replace('-','.')
-    zone=zone.drop_duplicates('TRK')
-    print(len(zone))
-    for trk,CANTP,tXm,tXM,mXm,mXM,miny,maxy in zip(zone.TRK, zone.Paneles, zone.tardeXmin, zone.tardeXmax,zone.mañanaXmin,zone.mañanaXmax,zone.minY,zone.maxY):
-        #mXm=mXm-10
-        #mXM=mXM+10
-        candidatos=Tarde.query(f'Xmean>{tXm-alpha} and Xmean<{tXM+alpha} and Y>@miny and Y<@maxy')
-        
-        if len(candidatos)<10:
-            print(trk,'TARDE')
-            pol = kml.newpolygon(name=f'{trk} Tarde')
-            pol.outerboundaryis = latlon(tXM+spdx,tXm+spdx,miny+spdy,maxy+spdy)
-            pol.innerboundaryis = latlon(tXM+spdx,tXm+spdx,miny+spdy,maxy+spdy)
-            c=[tuple(reversed(utm.to_latlon(float((mXM+tXm)/2), float((miny+maxy)/2), zone_number=19, northern=False)))]
-            kmlp.newpoint(name=f"{trk} Tarde", coords=c)   
-            listatrk.append(f'{trk} Tarde')
-        
-      
-        candidatos=Mañana.query(f'Xmean>{mXm-alpha} and Xmean<{mXM+alpha} and Y>@miny and Y<@maxy')
-        if len(candidatos)<10:
-            print(trk,'MAÑANA')
-            pol2 = kmlpt.newpolygon(name=f'{trk} Mañana')
-            pol2.outerboundaryis = latlon(mXM+spdx,mXm+spdx,miny+spdy,maxy+spdy)
-            pol2.innerboundaryis = latlon(mXM+spdx,mXm+spdx,miny+spdy,maxy+spdy)
-            c=[tuple(reversed(utm.to_latlon(float((mXM+tXm)/2), float((miny+maxy)/2), zone_number=19, northern=False)))]
-            kmlp2.newpoint(name=f"{trk} Mañana", coords=c)
-            listatrk.append(f'{trk} Mañana')
-          
-
-now=str(datetime.now()).replace(':','_').replace('.','-')
-#pol.innerboundaryis
-kml.save(Result+rf"/Tarde_{now}.kml")
-kmlpt.save(Result+rf"/Mañana_{now}.kml")
-kmlp.save(Result+rf"/Puntos Tarde_{now}.kml")
-kmlp2.save(Result+rf"/Puntos Mañana__{now}.kml")
-D.to_csv(Result+rf"/todo_{now}.csv")
-test=pd.DataFrame(listatrk)
-test.to_csv(Result+rf"/listaTRKfaltante_{now}.csv")  
-
-'''
-kml.save(rf"D:\Domeyko\result/Tarde_{now}.kml")
-kmlpt.save(rf"D:\Domeyko\result/Mañana_{now}.kml")
-kmlp.save(rf"D:\Domeyko\result/Puntos Tarde_{now}.kml")
-kmlp2.save(rf"D:\Domeyko\result/Puntos Mañana__{now}.kml")
-D.to_csv(rf'D:\Domeyko\result/todo_{now}.csv')
-test=pd.DataFrame(listatrk)
-test.to_csv(rf'D:\Domeyko\result/listaTRKfaltante_{now}.csv')  
-'''
 
