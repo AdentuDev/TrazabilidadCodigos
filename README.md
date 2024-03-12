@@ -1,9 +1,9 @@
 # TrazabilidadCodigos
 
 Estructura de directorios para procesamiento
-Carpeta principal: Procesamiento
-|----------------------------------------------------------------------------|
-Subcarpetas:
+Carpeta principal Procesamiento
+
+Subcarpetas
 -	Descargas (Listas descargadas)
 -	Listas (Listas Renombradas)
   o	 CT01 - Carpeta
@@ -20,4 +20,4 @@ Subcarpetas:
 -	Emisión (Contiene archivos CSV por CT’s) - Carpeta
 -	Otros (Otra información de planta) - Carpeta
 -	Centroides.xlsx
-|----------------------------------------------------------------------------|
+
