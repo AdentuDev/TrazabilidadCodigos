@@ -270,6 +270,18 @@ Po_stats['side']=side
 for ind,row in Po_stats.iterrows():
     dat=Po[(Po['X']==row['Xmed'] )&( Po['Y']>=row['Yinf'])&(Po['Y']<=row['Ysup'])].index
     Po.loc[dat,'D']=row['side']
+    
+
+for CR in Po.CT.drop_duplicates().sort_values():
+    count=0.5
+    nyn=Po.query('CT==@CR')
+    for Xx in nyn.X.drop_duplicates().sort_values():
+        count=count+0.5
+        fil=nyn.query('X==@Xx')
+        Po.loc[fil.index,'line']=str(int(count))
+
+Po.to_csv('entregable.csv',index=False)
+        
 #%%Conversion de Archivos de Escaneo y analisis simple PASO3
 root=Tk()
 EXC_OR = filedialog.askdirectory(title='Elija Carpeta de exceles para analizar')
@@ -358,6 +370,7 @@ df2['Tanda']=Tanda
 df2['cant_codd']=cant_codd
 df2['infos_cel']=infos_cel
 
+
 os.makedirs(Result+rf'/Reportes', exist_ok=True)
 df2.to_excel(Result+rf'/Reportes/Reporte_Diario_{str(datetime.now().date())}.xls')
 
@@ -380,10 +393,12 @@ ChangedOn2=list()       # ??
 ChangedUsing2=list()    # ??
 Malos2=list()           # ??
 CTT=list()
+totald=list()
+ll=list()
 for ex in xlsx:
     Lec=pd.read_excel(ex)
     xl = pd.ExcelFile(ex)
-    for BC,LATLON,DATE  in zip(Lec['Barcode'],Lec['GPS'],Lec['Date']):
+    for BC,LATLON,DATE,II  in zip(Lec['Barcode'],Lec['GPS'],Lec['Date'],Lec['id']):
         if LATLON=='Unknown': 
             pass
         else:
@@ -392,12 +407,14 @@ for ex in xlsx:
             Barcode2.append(BC) 
             lat2.append(float(LATLON.split(',')[0]))
             lon2.append(float(LATLON.split(',')[1]))
-            ids2.append(1)
+            ids2.append(II)
             Date2.append(DATE)
             ChangedBy2.append(f'sdlascan{ex.split("/")[-1].split("_")[1][-1:]}@gmail.com')
             ChangedOn2.append(DATE) 
             ChangedUsing2.append('Un Ladrillo')
             CTT.append(ex.split('/')[-2].replace('CT',''))
+            totald.append(ex.split('/')[-1].split('_')[-2])
+            ll.append(ex.split('/')[-1].split('_')[-3].replace('L',''))
 
 df2=pd.DataFrame()
 df2['Change']=Change2
@@ -411,6 +428,8 @@ df2['ChangedBy']=ChangedBy2
 df2['ChangedOn']=ChangedOn2
 df2['ChangedUsing']=ChangedUsing2
 df2['CT_LISTA']=CTT
+df2['D']=totald
+df2['linea']=ll
 
 df2['Day']=df2['Date'].apply(Obtener_dia)
 
@@ -421,11 +440,11 @@ Total['int']=Total['lat'].astype(str)+' '+Total['lon'].astype(str)
 Total['X']=Total['int'].apply(lambda x: utm.from_latlon(float(x.split(' ')[0]), float(x.split(' ')[1]))[0])
 Total['Y']=Total['int'].apply(lambda x: utm.from_latlon(float(x.split(' ')[0]), float(x.split(' ')[1]))[1])
 del Total['int']
-Total['D']='?'
-filtro = Total.Date.dt.time < time(14, 0)
-Total.loc[filtro,'D']='M'
-filtro = Total.Date.dt.time >= time(14, 0)
-Total.loc[filtro,'D']='T'
+#Total['D']='?'
+#filtro = Total.Date.dt.time < time(14, 0)
+#Total.loc[filtro,'D']='M'
+#filtro = Total.Date.dt.time >= time(14, 0)
+#Total.loc[filtro,'D']='T'
 EXX2=Total.copy()
 
 
@@ -433,7 +452,7 @@ EXX2['idlista']=0
 #EXX2['CT_LISTA']='?'
 EXX2['Xm']=0
 cont_id=0
-
+Comp=EXX2.copy()
 EXX2=EXX2.drop_duplicates('Barcode',keep='last').copy()
 EXX2['Barcode']=EXX2['Barcode'].astype('str')
 EXX2['CT_LISTA']=EXX2['CT_LISTA'].astype('str')
@@ -442,7 +461,6 @@ os.makedirs(Result+rf'/Mapa', exist_ok=True)
 EXX2.to_csv(Result+rf'/Mapa/TODO_EXCELES.csv',index=False)
 
 
-EXX2=EXX2.query('Barcode.str.len()==14 and Barcode.str.contains("I") and Barcode.str.contains("4")').copy()
 Po=Po.sort_values(['X','Y'])
 
 for DD in EXX2.Day.drop_duplicates().sort_values():
@@ -456,21 +474,59 @@ for DD in EXX2.Day.drop_duplicates().sort_values():
             Total_ShNa=Total_User.query('SheetName==@ShNa')
             EXX2.loc[(EXX2['Day']==DD)&(EXX2['ChangedBy']==User)&(EXX2['SheetName']==ShNa),'idlista']=cont_id
             EXX2.loc[(EXX2['idlista']==cont_id), 'Xm']=mean(Total_ShNa.X)
-            print(ShNa,cont_id)
-        
+            print(len(Total_ShNa),ShNa,cont_id)
+
+EXX2=EXX2.query('Barcode.str.len()==14 and (Barcode.str.contains("I") | Barcode.str.contains("l")) and Barcode.str.contains("4") or Barcode=="ERROR-REPASAR"').copy().drop_duplicates('Barcode')
+
+EXX2.to_csv(Result+rf'/Mapa/TODO_EXCELES.csv',index=False)
 
 RESPALDO=EXX2.copy()
 #EXX2=RESPALDO.copy()
 for CCTT in Po.CT.drop_duplicates().sort_values():
     SCANS_use=EXX2.query('CT_LISTA==@CCTT')
     print(CCTT,len(SCANS_use))
+    for idlis in SCANS_use.idlista.drop_duplicates():
+        SCANS_list=SCANS_use.query('idlista==@idlis')
+        if len(SCANS_list)%42!=0:
+            shh=SCANS_list.SheetName.iloc[0]
+            print(shh,len(SCANS_list))
+#%%Testeos
+
+a=Comp.query('SheetName=="12-03-2024_U04_CT64_L08_T_C252.xlsx"')
+b=EXX2.query('SheetName=="12-03-2024_U04_CT64_L08_T_C252.xlsx"')
+for nn in a.Barcode:
+    if nn not in list(b.Barcode):
+        print(nn)
+
+print(Comp.query('Barcode=="461907l3201250"'))
+
+
+for CCTT in Po.CT.drop_duplicates().sort_values():
+    for Shh in EXX2.query('CT_LISTA==@CCTT').idlista.drop_duplicates():
+        SCANS_use=EXX2.query('idlista==@Shh')
+        print(CCTT,len(SCANS_use))
+    sleep(4)
+        
+
+
+
 
 #%%Estudiar PASO5
 
-CT_LISTOS=['37','40','41','46','50','51','52','55','56','57','58','59','60','61','62','65']
-
-for CCTT in Po.CT.drop_duplicates().sort_values():
-#for CCTT in ['62']:
+#CT_LISTOS=['37','38?','39---','40','41','42','46','50','51','52','55','56','57','58','59','60','61','62','65']
+#falta
+CCTT="64"
+SCANS_use=EXX2.query('CT_LISTA==@CCTT')
+print(len(SCANS_use))
+xxxxxx=SCANS_use.head(1).Barcode.iloc[0]
+add=SCANS_use.head(1)
+add['Barcode']=['461928I4240865']
+SCANS_use=pd.concat([SCANS_use,add],axis=0).copy()
+SCANS_use=SCANS_use.sort_values(['D','Xm','Date'])
+print(len(SCANS_use))
+#%%
+#for CCTT in Po.CT.drop_duplicates().sort_values():
+for CCTT in ['44']:
     anterior_flags=''
     SCANS_use=EXX2.query('CT_LISTA==@CCTT')
     #print(CCTT,len(SCANS_use))
@@ -484,8 +540,8 @@ for CCTT in Po.CT.drop_duplicates().sort_values():
         EXX2.loc[SCANS_list.index,'D']="Selec"
         EXX2.query('CT_LISTA==@CCTT').to_csv('test.csv',index=False)
         if SCANS_list.sort_values('Date').head(1).Y.iloc[0]>SCANS_list.sort_values('Date').tail(1).Y.iloc[0]:
-            CODSUP=SCANS_list.sort_values('Date').head(1).Barcode.iloc[0]
-        else:CODSUP=SCANS_list.sort_values('Date').tail(1).Barcode.iloc[0]
+            CODSUP=SCANS_list.sort_values('Date').tail(1).Barcode.iloc[0]
+        else:CODSUP=SCANS_list.sort_values('Date').head(1).Barcode.iloc[0]
         
         datos=ventanaCapturaDatos(HORARIO,largo,lista,CODSUP)
         
@@ -532,6 +588,7 @@ for CCTT in Po.CT.drop_duplicates().sort_values():
     
     
     if len(SCANS_use)==len(Volche):
+        print('ok')
         for XM in SCANS_use.Xm.drop_duplicates():
             Cues=SCANS_use.query('Xm==@XM').sort_values('Date')
             if Cues.head(1).Y.iloc[0]>Cues.tail(1).Y.iloc[0]:#Norte a sur, invertir
@@ -539,12 +596,16 @@ for CCTT in Po.CT.drop_duplicates().sort_values():
                 TIMES=list(reversed(list(Cues.Date)))
                 SCANS_use.loc[Cues.index,'Barcode']=CODES
                 SCANS_use.loc[Cues.index,'Date']=TIMES
-        
+        #
         Po.loc[Volche.index,'COD']=list(SCANS_use.Barcode)
         Po.loc[Volche.index,'time']=list(SCANS_use.Date)
     
 
 #%% EMISION PASO6
+
+
+
+
 #CCTT='40'
 for CCTT in Po.CT.drop_duplicates().sort_values():
     CT40=Po.query('CT==@CCTT').copy().sort_values(['CT','TRK','STRg','X','Y']).reset_index()      
@@ -554,9 +615,124 @@ for CCTT in Po.CT.drop_duplicates().sort_values():
     CT40_=CT40.reindex(['time','COD','CT','iNV','SI','STRg','TRK','X','Y'],axis=1)
     CT40_.to_csv(f'EIFG-005-CSV-{str((int(CCTT)-36)).zfill(3)}-0 Listado módulos CT{CCTT}.csv',index=False)       
 
-#%%Guardar Avanzado
-EXX2.to_csv(Result+rF'/BRUTO_EMISION.csv',index=False)
+#%%ENCONTRAR ERRONEOS
+#EXX2.to_csv(Result+rF'/BRUTO_EMISION.csv',index=False)
 
+Prueba=list()
+count=0
+total=len(EXX2.query('ids==2').idlista.drop_duplicates())
+CONCHALE=pd.DataFrame()
+for N_Lista in EXX2.query('ids==2').idlista.drop_duplicates():
+    count+=1
+    if len(EXX2.query('idlista==@N_Lista and ids==2'))>2:
+        CONCHALE=pd.concat([CONCHALE, EXX2.query('idlista==@N_Lista')], axis=0)
+    print(f'ADV: {(total-count)/total}')
+CONCHALE.to_csv('LOC.CSV', index=False)
+    
+#TE=CONCHALE.query('idlista==887')
+for nn in CONCHALE.sort_values('CT_LISTA').idlista.drop_duplicates():
+    TE=CONCHALE.query('idlista==@nn').sort_values('Date')
+    #for n in range(int(len(TE)/(42/6))+1):
+    for n in range(168,int(len(TE))-42):   
+        #TE.head(int(n*(42/6))).to_csv('LOC.CSV', index=False)
+        TE.head(int(n)).to_csv('LOC.CSV', index=False)
+        sleep(0.3)
 
+gap=5
+compa=1
+count=0
+total=len(EXX2.idlista.drop_duplicates())
+CONCHALE2=pd.DataFrame()
+for N_Lista in EXX2.idlista.drop_duplicates():
+    encontrado=False
+    TE=EXX2.query('idlista==@N_Lista').reset_index().sort_values('Date').copy()
+    del TE['index']
+    ori=timedelta(hours=TE.Date.iloc[0].time().hour,minutes=TE.Date.iloc[0].time().minute,seconds=TE.Date.iloc[0].time().second)
+    CORTES=list()
+    if len(TE)%42==0:
+        for di in range(int(len(TE)/42)+1):
+            CORTES.append(42*di-1)
+        CORTES[0]=0
+        for nT in CORTES:
+            ori=timedelta(hours=TE.Date.iloc[nT-compa].time().hour,minutes=TE.Date.iloc[nT-compa].time().minute,seconds=TE.Date.iloc[nT-compa].time().second)
+            anti=timedelta(hours=TE.Date.iloc[nT].time().hour,minutes=TE.Date.iloc[nT].time().minute,seconds=TE.Date.iloc[nT].time().second)
+            if anti-ori>timedelta(seconds=gap):
+                encontrado=True
+                TE.loc[TE['Date']==TE.Date.iloc[nT],'ids']=2
+                print(anti-ori)
+                
+                
+    if encontrado:
+        CONCHALE2=pd.concat([CONCHALE2, TE], axis=0)
+        #ori=timedelta(hours=TE.Date.iloc[nT].time().hour,minutes=TE.Date.iloc[nT].time().minute,seconds=TE.Date.iloc[nT].time().second)
+    count=count+1
+    print(f'ADV: {1-(total-count)/total}')
 
+for elim in CONCHALE.idlista.drop_duplicates():
+    CONCHALE2=CONCHALE2.query('idlista!=@elim')
+    
+CONCHALE2.to_csv('LOC.CSV', index=False)
 
+Po['line']='?'
+for ctt in Po.CT.drop_duplicates():
+    ttr=Po.query('CT==@ctt')
+    line=0
+    for Xx in ttr.X.drop_duplicates().sort_values():
+        line+=1
+        Po.loc[ttr.query('X==@Xx').index,'line']=line
+
+Po['YTM']='?'
+Po['YTm']='?'
+for tt in Po.TRK.drop_duplicates():
+    CCC=Po.query('TRK==@tt')
+    Po.loc[CCC.index,'YTM']=max(CCC.Y)
+    Po.loc[CCC.index,'YTm']=min(CCC.Y)
+
+#%%
+TRKRS=list()
+hora=list()
+lineaA=list()
+ctt=list()
+
+for nn in list(CONCHALE2.sort_values('CT_LISTA').query('idlista>653').idlista.drop_duplicates()):
+    TE=CONCHALE2.query('idlista==@nn')
+    #for n in range(int(len(TE)/(42))+1):
+    #    TE.head(int(n*(42))).to_csv('LOC.CSV', index=False)
+    #    sleep(1)
+    HORARIO=TE.D.iloc[0]
+    largo=len(TE)
+    lista=TE.SheetName.iloc[0]
+    linea=int(TE.SheetName.iloc[0].split('L')[1][0:2])
+    CTCT=TE.CT_LISTA.iloc[0]
+    TE.to_csv('test.csv',index=False)
+    TE=TE.sort_values('Date')
+    if TE.head(1).Y.iloc[0]>TE.tail(1).Y.iloc[0]:
+        CTCT2='N-S'
+    else:
+        CTCT2='S-N'
+    datos=ventanaCapturaDatos(HORARIO,largo,lista,CTCT2)
+    if datos=='Parar':
+        break
+    datos=int(datos)
+    if int(datos)==0:
+        pass
+    if int(datos)>0:
+        
+        TE2=TE.iloc[42*(datos-1):42*(datos-1)+42]
+        YMM=mean(TE2.Y)
+        ORR=Po.query('Y>-3+@YMM and Y<3+@YMM and CT==@CTCT and line==@linea')
+        TRKRS.append(ORR.TRK.drop_duplicates().iloc[0])
+        hora.append(HORARIO)
+        lineaA.append(linea)
+        ctt.append(CTCT)
+
+ENTR=pd.DataFrame()
+ENTR['TRKRS']=TRKRS
+ENTR['hora']=hora
+ENTR['lineaA']=lineaA
+ENTR['ctt']=ctt
+
+ENTR.to_csv('TRK_REPA.csv',index=False)
+    
+    
+    
