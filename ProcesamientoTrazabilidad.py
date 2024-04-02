@@ -311,7 +311,7 @@ def opcion_2(dirPrincipal, dirReportes, dirListas):
                 print('error de dato',Excel.split('/')[-1],InfoLista)
                 break
             InfoCT='CT'+InfoLista.split('CT')[1][0:2] #info ct
-            FechaLista=Excel.split('/')[-2] #ifo Fecha
+            FechaLista=Excel.split('/')[-2] #info Fecha
             userLista=Excel.split('/')[-1].split('-')[1] #Numero de Usuario
             archivoLinea=''
             for letra in InfoLista.split('CT')[0]:
@@ -376,11 +376,11 @@ def opcion_2(dirPrincipal, dirReportes, dirListas):
     df2['infos_cel']=infos_cel
 
     # **** Directorio de Reporte ****
-    df2.to_excel(dirReportes+rf'/Reporte_Diario_{str(datetime.now().date())}.xls',engine="openpyxl")
-    pd.DataFrame(erroneos).to_excel(dirReportes+rf'/Erroneos_no_procesados_{str(datetime.now().date())}.xls',engine="openpyxl")
+    df2.to_csv(dirReportes + rf'/Reporte_Diario_{str(datetime.now().date())}.csv')
+    pd.DataFrame(erroneos).to_csv(dirReportes + rf'/Listas_Erroneas_{str(datetime.now().date())}.csv')
 
-    print(f"OUTPUT 1: {dirReportes}/Reporte_Diario_{str(datetime.now().date())}.xls")
-    print(f"OUTPUT 2: {dirReportes}/Erroneos_no_procesados_{str(datetime.now().date())}.xls")
+    print(f"OUTPUT 1: {dirReportes}/Reporte_Diario_{str(datetime.now().date())}.csv")
+    print(f"OUTPUT 2: {dirReportes}/Listas_Erroneas_{str(datetime.now().date())}.csv")
     print(f"OUTPUT 3: Listas por zonas: {os.listdir(dirListas)}")
     print("-------------------------------------------------------------")
 
@@ -646,7 +646,8 @@ dir_reportes = dir_principal+"/Reportes"
 os.makedirs(dir_principal+rf'/Listas', exist_ok=True) # Crea carpeta resultados
 dir_listas = dir_principal+"/Listas"
 
-
+os.makedirs(dir_principal+rf'/Descargas', exist_ok=True) # Crea carpeta resultados
+dir_descargas = dir_principal+"/Descargas"
 
 while True:
     print("** Procesamiento Trazabilidad **")
@@ -661,18 +662,16 @@ while True:
     seleccion = input("Por favor, selecciona una opción: ")
 
     if seleccion == '1':
-        #Orig_stat, Orig=opcion_1(dir_principal,dir_resultados)
         opcion_1(dir_principal, dir_resultados)
     elif seleccion == '2':
         opcion_2(dir_principal,dir_reportes,dir_listas)
     elif seleccion == '3':
-        #rr=opcion_3(dir_principal,dir_resultados,dir_reporte,dir_zonas)
         opcion_3(dir_principal, dir_mapa)
     elif seleccion == '4':
         opcion_4(dir_principal, dir_mapa)
     elif seleccion == '5':
         opcion_5(dir_emision,dir_mapa,dir_resultados)
-    if seleccion == '6':
+    elif seleccion == '6':
         break
     else:
         print("Selección no válida. Por favor, selecciona una opción válida.")
