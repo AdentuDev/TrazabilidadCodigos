@@ -1,0 +1,12 @@
+pip~=22.3.1
+wheel~=0.38.4
+utm~=0.7.0
+numpy~=1.26.4
+pytz~=2024.1
+colorama~=0.4.6
+setuptools~=65.5.1
+pandas~=2.2.1
+openpyxl~=3.1.2
+python-dateutil~=2.9.0.post0
+six~=1.16.0
+tqdm~=4.66.2
