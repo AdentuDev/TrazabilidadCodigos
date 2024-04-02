@@ -1,3 +1,4 @@
+Version de python > 3.9 
 
 Paso 1: Cargar archivo de Centroides Original
 
